@@ -702,7 +702,11 @@ impl SpircTask {
         };
         let position = self.state.get_position_ms();
 
+        // inform client about buffering
+        self.state.set_status(PlayStatus::kPlayStatusLoading);
+        println!("Status was set to loading in spirc");
         let end_of_track = self.player.load(track, play, position);
+        println!("Loading was finished in spirc");
 
         if play {
             self.state.set_status(PlayStatus::kPlayStatusPlay);

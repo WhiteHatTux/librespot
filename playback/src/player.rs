@@ -203,6 +203,9 @@ enum PlayerState {
         end_of_track: oneshot::Sender<()>,
         normalisation_factor: f32,
     },
+    Loading {
+        track_id: SpotifyId,
+    },
     Playing {
         track_id: SpotifyId,
         decoder: Decoder,
@@ -219,7 +222,7 @@ impl PlayerState {
     fn is_playing(&self) -> bool {
         use self::PlayerState::*;
         match *self {
-            Stopped | EndOfTrack { .. } | Paused { .. } => false,
+            Loading { .. } | Stopped | EndOfTrack { .. } | Paused { .. } => false,
             Playing { .. } => true,
             Invalid => panic!("invalid state"),
         }
@@ -228,7 +231,7 @@ impl PlayerState {
     fn decoder(&mut self) -> Option<&mut Decoder> {
         use self::PlayerState::*;
         match *self {
-            Stopped | EndOfTrack { .. } => None,
+            Loading { .. } | Stopped | EndOfTrack { .. } => None,
             Paused { ref mut decoder, .. } | Playing { ref mut decoder, .. } => Some(decoder),
             Invalid => panic!("invalid state"),
         }
@@ -402,11 +405,18 @@ impl PlayerInternal {
                     self.stop_sink_if_running();
                 }
 
+                self.state = PlayerState::Loading {
+                    track_id,
+                };
                 match self.load_track(track_id, position as i64) {
                     Some((decoder, normalisation_factor)) => {
                         if play {
                             match self.state {
-                                PlayerState::Playing {
+                                PlayerState::Loading {
+                                    track_id: old_track_id,
+                                    ..
+                                }
+                                | PlayerState::Playing {
                                     track_id: old_track_id,
                                     ..
                                 }
@@ -493,7 +503,8 @@ impl PlayerInternal {
             }
 
             PlayerCommand::Stop => match self.state {
-                PlayerState::Playing { track_id, .. }
+                PlayerState::Loading { track_id, .. }
+                | PlayerState::Playing { track_id, .. }
                 | PlayerState::Paused { track_id, .. }
                 | PlayerState::EndOfTrack { track_id } => {
                     self.stop_sink_if_running();
@@ -534,6 +545,17 @@ impl PlayerInternal {
             track.name,
             track_id.to_base62()
         );
+
+        // set status to loading
+        match self.state {
+            PlayerState::Loading { track_id: _, .. } => {
+                println!("Player status is loading");
+            }
+            _ => {
+                println!("Player status is different")
+            }
+        }
+
 
         let track = match self.find_available_alternative(&track) {
             Some(track) => track,
@@ -586,6 +608,15 @@ impl PlayerInternal {
 
         info!("Track \"{}\" loaded", track.name);
 
+        // set status to loading
+        match self.state {
+            PlayerState::Loading { track_id: _, .. } => {
+                println!("2. Player status is loading");
+            }
+            _ => {
+                println!("2. Player status is different")
+            }
+        }
         Some((decoder, normalisation_factor))
     }
 }
